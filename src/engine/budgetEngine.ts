@@ -135,6 +135,108 @@ export function calculateCategoryBalances(
   return balances;
 }
 
+export interface CumulativeMonthBudget {
+  categoryBalances: Record<string, CategoryBalance>;
+  previousAvailable: Record<string, number>;
+  readyToAssignCents: number;
+  priorOverspendingCents: number;
+}
+
+/**
+ * Obtiene la lista ordenada cronológicamente de meses relevantes hasta el mes objetivo.
+ */
+export function getChronologicalMonths(
+  transactions: Transaction[],
+  assignments: BudgetAssignment[],
+  targetMonth: string
+): string[] {
+  const monthSet = new Set<string>();
+  monthSet.add(targetMonth);
+
+  for (const tx of transactions) {
+    if (tx.date) {
+      const m = tx.date.slice(0, 7);
+      if (m <= targetMonth) {
+        monthSet.add(m);
+      }
+    }
+  }
+
+  for (const a of assignments) {
+    if (a.month && a.month <= targetMonth) {
+      monthSet.add(a.month);
+    }
+  }
+
+  return Array.from(monthSet).sort();
+}
+
+/**
+ * Calcula en cadena cronológica los presupuestos mensuales con arrastre acumulativo (Rollover / Carryover).
+ * Regla oficial YNAB:
+ * - Superávit disponible en sobres (>0) se traslada íntegramente al mes siguiente dentro del sobre.
+ * - Sobregastos en sobres (<0) resetean a $0 en el mes siguiente y se descuentan de Ready to Assign.
+ */
+export function calculateMonthlyChain(
+  categories: Category[],
+  accounts: Account[],
+  transactions: Transaction[],
+  assignments: BudgetAssignment[],
+  targetMonth: string
+): CumulativeMonthBudget {
+  const sortedMonths = getChronologicalMonths(transactions, assignments, targetMonth);
+
+  let currentPrevAvailable: Record<string, number> = {};
+  let accumulatedPriorOverspending = 0;
+  let targetCategoryBalances: Record<string, CategoryBalance> = {};
+  let targetPrevAvailable: Record<string, number> = {};
+
+  for (const m of sortedMonths) {
+    const activity = calculateCategoryActivity(transactions, m);
+    const balances = calculateCategoryBalances(
+      categories,
+      assignments,
+      activity,
+      m,
+      currentPrevAvailable
+    );
+
+    if (m === targetMonth) {
+      targetCategoryBalances = balances;
+      targetPrevAvailable = { ...currentPrevAvailable };
+      break;
+    }
+
+    // Preparar el saldo previo para el siguiente mes cronológico
+    const nextPrevAvailable: Record<string, number> = {};
+    for (const cat of categories) {
+      const avail = balances[cat.id]?.availableCents || 0;
+      if (avail > 0) {
+        nextPrevAvailable[cat.id] = avail;
+      } else if (avail < 0) {
+        // Regla YNAB: Sobregasto en efectivo del mes anterior resetea el sobre a 0
+        // y se absorbe deduciéndose de Ready to Assign en los meses subsiguientes
+        nextPrevAvailable[cat.id] = 0;
+        accumulatedPriorOverspending += Math.abs(avail);
+      } else {
+        nextPrevAvailable[cat.id] = 0;
+      }
+    }
+
+    currentPrevAvailable = nextPrevAvailable;
+  }
+
+  const baseRTA = calculateReadyToAssign(accounts, transactions, assignments, targetMonth);
+  const readyToAssignCents = baseRTA - accumulatedPriorOverspending;
+
+  return {
+    categoryBalances: targetCategoryBalances,
+    previousAvailable: targetPrevAvailable,
+    readyToAssignCents,
+    priorOverspendingCents: accumulatedPriorOverspending,
+  };
+}
+
 /**
  * Validación matemática de transacciones divididas (Split Transactions).
  * Invariante: Monto Total = Suma de los Splits.

@@ -10,6 +10,7 @@ import {
   countCategoryUsage,
   reassignCategoryInTransactions,
   reassignCategoryAssignments,
+  calculateMonthlyChain,
 } from './budgetEngine';
 import {
   Account,
@@ -356,6 +357,167 @@ describe('Budget Engine - Lógica de Dominio y Casos Borde YNAB', () => {
       const originalTotal = assignments.reduce((sum, a) => sum + a.assignedCents, 0);
       const newTotal = consolidated.reduce((sum, a) => sum + a.assignedCents, 0);
       expect(newTotal).toBe(originalTotal);
+    });
+  });
+
+  describe('Rollover acumulativo entre meses (Cumulative Carryover)', () => {
+    it('debe trasladar el saldo positivo disponible (superávit) al mes siguiente', () => {
+      const accounts: Account[] = [
+        { id: 'acc-1', name: 'Banco', type: 'CHECKING', initialBalanceCents: 100000, isActive: true }, // $1,000.00
+      ];
+      const categories: Category[] = [
+        { id: 'cat-food', groupId: 'g1', name: 'Comida', sortOrder: 1 },
+      ];
+      // Mes 1: 2026-09 -> Asigna $400, gasta $100. Saldo restante: $300 (30000 centavos)
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-09', categoryId: 'cat-food', assignedCents: 40000 },
+      ];
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-1',
+          accountId: 'acc-1',
+          date: '2026-09-05',
+          amountCents: -10000,
+          payeeId: 'p1',
+          categoryId: 'cat-food',
+          type: 'STANDARD',
+        },
+      ];
+
+      // Verificación en Septiembre (Mes 1)
+      const sepBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-09');
+      expect(sepBudget.categoryBalances['cat-food'].availableCents).toBe(30000); // $300
+      expect(sepBudget.previousAvailable['cat-food'] || 0).toBe(0);
+
+      // Verificación en Octubre (Mes 2) sin asignaciones ni gastos nuevos
+      const octBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-10');
+      // Debe arrastrar los $300 como previousAvailable
+      expect(octBudget.previousAvailable['cat-food']).toBe(30000);
+      // El disponible en Octubre debe ser $300
+      expect(octBudget.categoryBalances['cat-food'].availableCents).toBe(30000);
+      expect(octBudget.categoryBalances['cat-food'].assignedCents).toBe(0);
+      expect(octBudget.categoryBalances['cat-food'].activityCents).toBe(0);
+    });
+
+    it('debe acumular correctamente si en el mes siguiente se asigna o gasta dinero nuevo', () => {
+      const accounts: Account[] = [
+        { id: 'acc-1', name: 'Banco', type: 'CHECKING', initialBalanceCents: 150000, isActive: true }, // $1,500.00
+      ];
+      const categories: Category[] = [
+        { id: 'cat-food', groupId: 'g1', name: 'Comida', sortOrder: 1 },
+      ];
+      // Mes 1 (2026-09): Asigna $400, Gasta $100 -> Sobran $300
+      // Mes 2 (2026-10): Asigna $200 más, Gasta $150 -> Disponible = $300 + $200 - $150 = $350
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-09', categoryId: 'cat-food', assignedCents: 40000 },
+        { month: '2026-10', categoryId: 'cat-food', assignedCents: 20000 },
+      ];
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-1',
+          accountId: 'acc-1',
+          date: '2026-09-05',
+          amountCents: -10000,
+          payeeId: 'p1',
+          categoryId: 'cat-food',
+          type: 'STANDARD',
+        },
+        {
+          id: 'tx-2',
+          accountId: 'acc-1',
+          date: '2026-10-02',
+          amountCents: -15000,
+          payeeId: 'p1',
+          categoryId: 'cat-food',
+          type: 'STANDARD',
+        },
+      ];
+
+      const octBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-10');
+      expect(octBudget.previousAvailable['cat-food']).toBe(30000); // Saldo anterior: $300
+      expect(octBudget.categoryBalances['cat-food'].assignedCents).toBe(20000); // Asignado: $200
+      expect(octBudget.categoryBalances['cat-food'].activityCents).toBe(-15000); // Gastado: -$150
+      expect(octBudget.categoryBalances['cat-food'].availableCents).toBe(35000); // Disponible total: $350
+    });
+
+    it('debe aplicar la regla de YNAB para sobregasto en efectivo: resetea sobre a $0 en mes siguiente y descuenta de RTA', () => {
+      const accounts: Account[] = [
+        { id: 'acc-1', name: 'Banco', type: 'CHECKING', initialBalanceCents: 100000, isActive: true }, // $1,000.00
+      ];
+      const categories: Category[] = [
+        { id: 'cat-food', groupId: 'g1', name: 'Comida', sortOrder: 1 },
+      ];
+      // Mes 1 (2026-09): Asigna $50, pero gasta $120 -> Sobregasto de -$70
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-09', categoryId: 'cat-food', assignedCents: 5000 },
+      ];
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-1',
+          accountId: 'acc-1',
+          date: '2026-09-10',
+          amountCents: -12000,
+          payeeId: 'p1',
+          categoryId: 'cat-food',
+          type: 'STANDARD',
+        },
+      ];
+
+      // En Septiembre: Disponible es -$70 y marca isOverspent: true
+      const sepBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-09');
+      expect(sepBudget.categoryBalances['cat-food'].availableCents).toBe(-7000);
+      expect(sepBudget.categoryBalances['cat-food'].isOverspent).toBe(true);
+
+      // En Octubre (Mes 2):
+      // 1. El sobre resetea a $0 (previousAvailable = 0, available = 0)
+      // 2. El sobregasto de -$70 se deduce de Ready to Assign (priorOverspendingCents = 7000)
+      const octBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-10');
+      expect(octBudget.previousAvailable['cat-food']).toBe(0);
+      expect(octBudget.categoryBalances['cat-food'].availableCents).toBe(0);
+      expect(octBudget.priorOverspendingCents).toBe(7000);
+
+      // En Octubre, Ready to Assign = Saldo inicial ($1,000) - Asignado sep ($50) - Sobregasto ($70) = $880
+      expect(octBudget.readyToAssignCents).toBe(88000);
+
+      // Verificación de conservación en Octubre:
+      // Saldo en cuenta = $1,000 - $120 gastado = $880
+      // Total sobres ($0) + RTA ($880) = $880. ¡Ecuación perfecta!
+      const balances = calculateAccountBalances(accounts, transactions);
+      const totalCash = Object.values(balances).reduce((a, b) => a + b, 0);
+      const totalAvailable = Object.values(octBudget.categoryBalances).reduce((a, b) => a + b.availableCents, 0);
+      expect(totalCash).toBe(octBudget.readyToAssignCents + totalAvailable);
+    });
+
+    it('debe conservar la ecuación fundamental a lo largo de 3 meses consecutivos', () => {
+      const accounts: Account[] = [
+        { id: 'acc-1', name: 'Banco', type: 'CHECKING', initialBalanceCents: 200000, isActive: true }, // $2,000.00
+      ];
+      const categories: Category[] = [
+        { id: 'cat-rent', groupId: 'g1', name: 'Alquiler', sortOrder: 1 },
+        { id: 'cat-food', groupId: 'g1', name: 'Comida', sortOrder: 2 },
+      ];
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-08', categoryId: 'cat-rent', assignedCents: 50000 },
+        { month: '2026-08', categoryId: 'cat-food', assignedCents: 20000 },
+        { month: '2026-09', categoryId: 'cat-rent', assignedCents: 50000 },
+        { month: '2026-09', categoryId: 'cat-food', assignedCents: 15000 },
+        { month: '2026-10', categoryId: 'cat-food', assignedCents: 25000 },
+      ];
+      const transactions: Transaction[] = [
+        { id: 'tx-1', accountId: 'acc-1', date: '2026-08-10', amountCents: -50000, payeeId: 'p', categoryId: 'cat-rent', type: 'STANDARD' },
+        { id: 'tx-2', accountId: 'acc-1', date: '2026-08-20', amountCents: -10000, payeeId: 'p', categoryId: 'cat-food', type: 'STANDARD' },
+        { id: 'tx-3', accountId: 'acc-1', date: '2026-09-05', amountCents: -50000, payeeId: 'p', categoryId: 'cat-rent', type: 'STANDARD' },
+        { id: 'tx-4', accountId: 'acc-1', date: '2026-09-15', amountCents: -12000, payeeId: 'p', categoryId: 'cat-food', type: 'STANDARD' },
+      ];
+
+      for (const m of ['2026-08', '2026-09', '2026-10']) {
+        const mBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, m);
+        const accBalances = calculateAccountBalances(accounts, transactions.filter(t => t.date.slice(0, 7) <= m));
+        const totalCash = Object.values(accBalances).reduce((a, b) => a + b, 0);
+        const totalAvailable = Object.values(mBudget.categoryBalances).reduce((a, b) => a + b.availableCents, 0);
+
+        expect(totalCash).toBe(mBudget.readyToAssignCents + totalAvailable);
+      }
     });
   });
 });

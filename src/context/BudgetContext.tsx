@@ -12,12 +12,11 @@ import {
 import {
   calculateAccountBalances,
   calculateCategoryActivity,
-  calculateReadyToAssign,
-  calculateCategoryBalances,
   createTransferPair,
   countCategoryUsage,
   reassignCategoryInTransactions,
   reassignCategoryAssignments,
+  calculateMonthlyChain,
 } from '../engine/budgetEngine';
 import {
   initialAccounts,
@@ -43,6 +42,8 @@ interface BudgetContextType {
   categoryActivity: Record<string, number>;
   readyToAssignCents: number;
   categoryBalances: Record<string, CategoryBalance>;
+  previousAvailableBalances: Record<string, number>;
+  priorOverspendingCents: number;
 
   // Acciones
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
@@ -145,15 +146,16 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [transactions, currentMonth]
   );
 
-  const readyToAssignCents = useMemo(
-    () => calculateReadyToAssign(accounts, transactions, assignments, currentMonth),
-    [accounts, transactions, assignments, currentMonth]
+  // Cálculo encadenado acumulativo multimensual (Rollover / Carryover)
+  const monthlyChainData = useMemo(
+    () => calculateMonthlyChain(categories, accounts, transactions, assignments, currentMonth),
+    [categories, accounts, transactions, assignments, currentMonth]
   );
 
-  const categoryBalances = useMemo(
-    () => calculateCategoryBalances(categories, assignments, categoryActivity, currentMonth),
-    [categories, assignments, categoryActivity, currentMonth]
-  );
+  const readyToAssignCents = monthlyChainData.readyToAssignCents;
+  const categoryBalances = monthlyChainData.categoryBalances;
+  const previousAvailableBalances = monthlyChainData.previousAvailable;
+  const priorOverspendingCents = monthlyChainData.priorOverspendingCents;
 
   // Acciones
   const addTransaction = (txData: Omit<Transaction, 'id'>) => {
@@ -399,6 +401,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         categoryActivity,
         readyToAssignCents,
         categoryBalances,
+        previousAvailableBalances,
+        priorOverspendingCents,
         addTransaction,
         updateTransaction,
         deleteTransaction,

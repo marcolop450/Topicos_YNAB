@@ -27,6 +27,8 @@ export const BudgetView: React.FC = () => {
     setCurrentMonth,
     readyToAssignCents,
     categoryBalances,
+    previousAvailableBalances,
+    priorOverspendingCents,
     assignBudget,
     createCategory,
     createGroup,
@@ -156,14 +158,28 @@ export const BudgetView: React.FC = () => {
               </div>
             </div>
 
-            {overspentCategories.length > 0 && (
-              <div className="px-3.5 py-2 rounded-xl bg-black/20 border border-white/20 text-xs font-semibold flex items-center">
-                <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-300" />
-                <span>
-                  {overspentCategories.length} {overspentCategories.length === 1 ? 'sobre con sobregasto' : 'sobres con sobregasto'}
-                </span>
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              {priorOverspendingCents > 0 && (
+                <div
+                  title="Sobregastos del mes anterior descontados de la bolsa global según la regla oficial de YNAB"
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/30 border border-amber-300/40 text-xs font-semibold flex items-center text-amber-100"
+                >
+                  <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-300 shrink-0" />
+                  <span>
+                    Deducción mes anterior: -{Currency.format(priorOverspendingCents)}
+                  </span>
+                </div>
+              )}
+
+              {overspentCategories.length > 0 && (
+                <div className="px-3.5 py-2 rounded-xl bg-black/20 border border-white/20 text-xs font-semibold flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-300" />
+                  <span>
+                    {overspentCategories.length} {overspentCategories.length === 1 ? 'sobre con sobregasto' : 'sobres con sobregasto'}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -356,10 +372,17 @@ export const BudgetView: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Saldo Disponible (Píldora Verde o Alerta Roja de Sobregasto) */}
+                        {/* Saldo Disponible con Tooltip de Desglose Matemático */}
                         <div className="col-span-4 sm:col-span-2 flex justify-end">
                           <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-xs ${
+                            title={`Desglose contable:\n• Saldo mes anterior: ${Currency.format(
+                              previousAvailableBalances[category.id] || 0
+                            )}\n• Asignado este mes: ${Currency.format(
+                              balance.assignedCents
+                            )}\n• Gastado este mes: ${Currency.format(
+                              balance.activityCents
+                            )}\n= Saldo disponible: ${Currency.format(balance.availableCents)}`}
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full font-mono font-bold text-xs cursor-help transition-transform hover:scale-105 ${
                               balance.availableCents < 0
                                 ? 'bg-red-100 text-red-800 border border-red-300'
                                 : balance.availableCents > 0
@@ -434,7 +457,16 @@ export const BudgetView: React.FC = () => {
                     </div>
 
                     <div className="col-span-4 sm:col-span-2 flex items-center justify-end space-x-2">
-                      <span className="font-mono font-medium text-slate-600">
+                      <span
+                        title={`Desglose contable:\n• Saldo mes anterior: ${Currency.format(
+                          previousAvailableBalances[category.id] || 0
+                        )}\n• Asignado este mes: ${Currency.format(
+                          balance.assignedCents
+                        )}\n• Gastado este mes: ${Currency.format(
+                          balance.activityCents
+                        )}\n= Saldo disponible: ${Currency.format(balance.availableCents)}`}
+                        className="font-mono font-medium text-slate-600 cursor-help"
+                      >
                         {Currency.format(balance.availableCents)}
                       </span>
                       <button
