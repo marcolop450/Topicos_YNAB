@@ -50,9 +50,11 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
   const isRTASelected = selectedCategoryId === READY_TO_ASSIGN_CATEGORY_ID;
 
-  // Filtrado de categorías por búsqueda
-  const filteredCategories = categories.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+  // Filtrado de categorías por búsqueda (ocultando categorías archivadas a menos que ya estén seleccionadas)
+  const filteredCategories = categories.filter(
+    (c) =>
+      (!c.isHidden || c.id === selectedCategoryId) &&
+      c.name.toLowerCase().includes(search.toLowerCase())
   );
 
   // Agrupar categorías filtradas por su grupo

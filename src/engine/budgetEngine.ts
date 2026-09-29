@@ -219,3 +219,87 @@ export function createTransferPair(
 
   return { debitTx, creditTx };
 }
+
+/**
+ * Cuenta el número de referencias (transacciones estándar o líneas de split) que usan una categoría.
+ */
+export function countCategoryUsage(categoryId: string, transactions: Transaction[]): number {
+  return transactions.reduce((count, tx) => {
+    let matches = 0;
+    if (tx.categoryId === categoryId) {
+      matches++;
+    }
+    if (tx.splits && tx.splits.length > 0) {
+      matches += tx.splits.filter((s) => s.categoryId === categoryId).length;
+    }
+    return count + matches;
+  }, 0);
+}
+
+/**
+ * Reasigna todas las referencias de una categoría eliminada a una categoría de destino (Caso CB-03).
+ */
+export function reassignCategoryInTransactions(
+  sourceCategoryId: string,
+  targetCategoryId: string,
+  transactions: Transaction[]
+): Transaction[] {
+  return transactions.map((tx) => {
+    let modified = false;
+    let newCatId = tx.categoryId;
+    let newSplits = tx.splits;
+
+    if (tx.categoryId === sourceCategoryId) {
+      newCatId = targetCategoryId;
+      modified = true;
+    }
+
+    if (tx.splits && tx.splits.some((s) => s.categoryId === sourceCategoryId)) {
+      newSplits = tx.splits.map((s) =>
+        s.categoryId === sourceCategoryId ? { ...s, categoryId: targetCategoryId } : s
+      );
+      modified = true;
+    }
+
+    return modified ? { ...tx, categoryId: newCatId, splits: newSplits } : tx;
+  });
+}
+
+/**
+ * Consolidación de asignaciones presupuestarias mensuales al reasignar una categoría (Caso CB-03).
+ */
+export function reassignCategoryAssignments(
+  sourceCategoryId: string,
+  targetCategoryId: string,
+  assignments: BudgetAssignment[]
+): BudgetAssignment[] {
+  const sourceAssignments = assignments.filter((a) => a.categoryId === sourceCategoryId);
+  if (sourceAssignments.length === 0) {
+    return assignments.filter((a) => a.categoryId !== sourceCategoryId);
+  }
+
+  const updatedAssignments = assignments.filter((a) => a.categoryId !== sourceCategoryId);
+
+  for (const sourceAssign of sourceAssignments) {
+    const targetIndex = updatedAssignments.findIndex(
+      (a) => a.categoryId === targetCategoryId && a.month === sourceAssign.month
+    );
+
+    if (targetIndex >= 0) {
+      updatedAssignments[targetIndex] = {
+        ...updatedAssignments[targetIndex],
+        assignedCents:
+          updatedAssignments[targetIndex].assignedCents + sourceAssign.assignedCents,
+      };
+    } else {
+      updatedAssignments.push({
+        categoryId: targetCategoryId,
+        month: sourceAssign.month,
+        assignedCents: sourceAssign.assignedCents,
+      });
+    }
+  }
+
+  return updatedAssignments;
+}
+

@@ -8,10 +8,16 @@ import {
   ChevronDown,
   ChevronRight as ChevronRightIcon,
   Sparkles,
+  Pencil,
+  Trash2,
+  EyeOff,
+  Eye,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
-import { Currency } from '../types';
+import { Currency, Category } from '../types';
 import { AmountCalculatorInput } from './AmountCalculatorInput';
+import { DeleteCategoryModal } from './DeleteCategoryModal';
+import { EditCategoryModal } from './EditCategoryModal';
 
 export const BudgetView: React.FC = () => {
   const {
@@ -24,6 +30,7 @@ export const BudgetView: React.FC = () => {
     assignBudget,
     createCategory,
     createGroup,
+    toggleHideCategory,
     accountBalances,
   } = useBudget();
 
@@ -32,6 +39,9 @@ export const BudgetView: React.FC = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const [addingCategoryToGroup, setAddingCategoryToGroup] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [showHiddenCategories, setShowHiddenCategories] = useState(false);
 
   // Navegación de meses
   const changeMonth = (delta: number) => {
@@ -73,6 +83,9 @@ export const BudgetView: React.FC = () => {
 
   // Comprobar si hay sobregasto en alguna categoría
   const overspentCategories = Object.values(categoryBalances).filter((c) => c.isOverspent);
+
+  // Categorías actualmente ocultas
+  const hiddenCategories = categories.filter((c) => c.isHidden);
 
   return (
     <div className="space-y-6">
@@ -180,7 +193,7 @@ export const BudgetView: React.FC = () => {
         {/* Grupos en Acordeón */}
         <div className="divide-y divide-slate-100">
           {groups.map((group) => {
-            const groupCategories = categories.filter((c) => c.groupId === group.id);
+            const groupCategories = categories.filter((c) => c.groupId === group.id && !c.isHidden);
             const isCollapsed = collapsedGroups[group.id];
 
             // Totales acumulados del grupo
@@ -282,9 +295,37 @@ export const BudgetView: React.FC = () => {
                         key={category.id}
                         className="grid grid-cols-12 px-6 py-2 items-center hover:bg-slate-50/70 transition-colors text-xs"
                       >
-                        {/* Nombre de Categoría */}
-                        <div className="col-span-5 sm:col-span-6 pl-6 font-medium text-slate-800 truncate">
-                          {category.name}
+                        {/* Nombre de Categoría y Acciones */}
+                        <div className="col-span-5 sm:col-span-6 pl-6 flex items-center justify-between pr-2 group">
+                          <span className="font-medium text-slate-800 truncate" title={category.name}>
+                            {category.name}
+                          </span>
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 shrink-0 ml-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingCategory(category)}
+                              title="Editar categoría"
+                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleHideCategory(category.id)}
+                              title="Ocultar categoría"
+                              className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                            >
+                              <EyeOff className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingCategory(category)}
+                              title="Eliminar categoría (Caso CB-03)"
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Asignado (Con Calculadora Interactiva Inline) */}
@@ -341,6 +382,87 @@ export const BudgetView: React.FC = () => {
         </div>
       </div>
 
+      {/* 4. Sección de Categorías Ocultas (si existen) */}
+      {hiddenCategories.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowHiddenCategories(!showHiddenCategories)}
+            className="w-full px-6 py-3.5 bg-slate-50 flex items-center justify-between text-xs font-bold text-slate-600 hover:bg-slate-100/80 transition-colors"
+          >
+            <div className="flex items-center space-x-2">
+              <EyeOff className="w-4 h-4 text-slate-400" />
+              <span>Categorías Ocultas ({hiddenCategories.length})</span>
+            </div>
+            {showHiddenCategories ? (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronRightIcon className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
+
+          {showHiddenCategories && (
+            <div className="divide-y divide-slate-100 border-t border-slate-200">
+              {hiddenCategories.map((category) => {
+                const balance = categoryBalances[category.id] || {
+                  assignedCents: 0,
+                  activityCents: 0,
+                  availableCents: 0,
+                  isOverspent: false,
+                };
+                const groupName =
+                  groups.find((g) => g.id === category.groupId)?.name || 'Sin grupo';
+
+                return (
+                  <div
+                    key={category.id}
+                    className="grid grid-cols-12 px-6 py-2.5 items-center hover:bg-slate-50/70 transition-colors text-xs"
+                  >
+                    <div className="col-span-5 sm:col-span-6 flex items-center space-x-1.5 truncate pl-6">
+                      <span className="text-slate-400 text-[11px] truncate">{groupName} /</span>
+                      <span className="font-semibold text-slate-700 truncate">
+                        {category.name}
+                      </span>
+                    </div>
+
+                    <div className="col-span-3 sm:col-span-2 text-right font-mono text-slate-500">
+                      {Currency.format(balance.assignedCents)}
+                    </div>
+
+                    <div className="col-span-2 text-right font-mono text-slate-400 hidden sm:block">
+                      {Currency.format(balance.activityCents)}
+                    </div>
+
+                    <div className="col-span-4 sm:col-span-2 flex items-center justify-end space-x-2">
+                      <span className="font-mono font-medium text-slate-600">
+                        {Currency.format(balance.availableCents)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleHideCategory(category.id)}
+                        title="Restaurar / Mostrar categoría"
+                        className="px-2 py-0.5 text-[11px] font-bold text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors inline-flex items-center"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Mostrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingCategory(category)}
+                        title="Eliminar categoría"
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modal para Crear Nuevo Grupo */}
       {newGroupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
@@ -383,6 +505,20 @@ export const BudgetView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Eliminación Segura CB-03 */}
+      <DeleteCategoryModal
+        isOpen={!!deletingCategory}
+        onClose={() => setDeletingCategory(null)}
+        category={deletingCategory}
+      />
+
+      {/* Modal de Edición de Categoría */}
+      <EditCategoryModal
+        isOpen={!!editingCategory}
+        onClose={() => setEditingCategory(null)}
+        category={editingCategory}
+      />
     </div>
   );
 };

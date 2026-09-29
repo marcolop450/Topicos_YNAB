@@ -15,6 +15,9 @@ import {
   calculateReadyToAssign,
   calculateCategoryBalances,
   createTransferPair,
+  countCategoryUsage,
+  reassignCategoryInTransactions,
+  reassignCategoryAssignments,
 } from '../engine/budgetEngine';
 import {
   initialAccounts,
@@ -48,7 +51,13 @@ interface BudgetContextType {
   assignBudget: (categoryId: string, month: string, cents: number) => void;
   createAccount: (name: string, type: AccountType, initialBalanceCents: number) => Account;
   createCategory: (name: string, groupId: string) => Category;
+  updateCategory: (id: string, updated: Partial<Pick<Category, 'name' | 'groupId' | 'isHidden'>>) => void;
+  toggleHideCategory: (id: string) => void;
+  getCategoryTransactionCount: (categoryId: string) => number;
+  deleteCategory: (id: string, reassignToCategoryId?: string) => { success: boolean; error?: string };
   createGroup: (name: string) => CategoryGroup;
+  updateGroup: (id: string, name: string) => void;
+  deleteGroup: (id: string) => { success: boolean; error?: string };
   createPayee: (name: string) => Payee;
   resetToSampleData: () => void;
   exportDataJson: () => string;
@@ -236,6 +245,64 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newCategory;
   };
 
+  const updateCategory = (
+    id: string,
+    updated: Partial<Pick<Category, 'name' | 'groupId' | 'isHidden'>>
+  ) => {
+    setCategories((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updated } : c))
+    );
+  };
+
+  const toggleHideCategory = (id: string) => {
+    setCategories((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, isHidden: !c.isHidden } : c))
+    );
+  };
+
+  const getCategoryTransactionCount = (categoryId: string): number => {
+    return countCategoryUsage(categoryId, transactions);
+  };
+
+  const deleteCategory = (
+    id: string,
+    reassignToCategoryId?: string
+  ): { success: boolean; error?: string } => {
+    const txCount = countCategoryUsage(id, transactions);
+
+    // Caso CB-03: Si tiene movimientos y no se indicó categoría destino, bloquear borrado
+    if (txCount > 0 && !reassignToCategoryId) {
+      return {
+        success: false,
+        error: `La categoría tiene ${txCount} transacciones asociadas. Debes reasignarlas o elegir ocultar la categoría.`,
+      };
+    }
+
+    if (reassignToCategoryId === id) {
+      return {
+        success: false,
+        error: 'La categoría de reasignación no puede ser la misma categoría a eliminar.',
+      };
+    }
+
+    // 1. Reasignar transacciones y consolidar asignaciones si se especificó categoría destino
+    if (reassignToCategoryId) {
+      setTransactions((prev) =>
+        reassignCategoryInTransactions(id, reassignToCategoryId, prev)
+      );
+      setAssignments((prev) =>
+        reassignCategoryAssignments(id, reassignToCategoryId, prev)
+      );
+    } else {
+      // Sin transacciones ni reasignación: limpiar asignaciones de la categoría
+      setAssignments((prev) => prev.filter((a) => a.categoryId !== id));
+    }
+
+    // 2. Eliminar la categoría de la lista
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+    return { success: true };
+  };
+
   const createGroup = (name: string) => {
     const newGroup: CategoryGroup = {
       id: `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -244,6 +311,22 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setGroups((prev) => [...prev, newGroup]);
     return newGroup;
+  };
+
+  const updateGroup = (id: string, name: string) => {
+    setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, name } : g)));
+  };
+
+  const deleteGroup = (id: string): { success: boolean; error?: string } => {
+    const catsInGroup = categories.filter((c) => c.groupId === id);
+    if (catsInGroup.length > 0) {
+      return {
+        success: false,
+        error: `El grupo contiene ${catsInGroup.length} categorías. Elimina o mueve las categorías antes de borrar el grupo.`,
+      };
+    }
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+    return { success: true };
   };
 
   const createPayee = (name: string) => {
@@ -322,7 +405,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         assignBudget,
         createAccount,
         createCategory,
+        updateCategory,
+        toggleHideCategory,
+        getCategoryTransactionCount,
+        deleteCategory,
         createGroup,
+        updateGroup,
+        deleteGroup,
         createPayee,
         resetToSampleData,
         exportDataJson,

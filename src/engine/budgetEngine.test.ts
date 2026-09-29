@@ -7,6 +7,9 @@ import {
   validateSplitTransaction,
   validateTransfer,
   createTransferPair,
+  countCategoryUsage,
+  reassignCategoryInTransactions,
+  reassignCategoryAssignments,
 } from './budgetEngine';
 import {
   Account,
@@ -254,5 +257,105 @@ describe('Budget Engine - Lógica de Dominio y Casos Borde YNAB', () => {
     // Verificación de la ecuación:
     // Total en Cuentas ($1400) = Ready to Assign ($400) + Total Disponible ($1000)
     expect(totalCashInAccounts).toBe(rta + totalAvailableInCategories);
+  });
+
+  describe('Caso Borde CB-03: Integridad referencial en eliminación y reasignación de categorías', () => {
+    it('debe contar con precisión las referencias de una categoría en transacciones simples y splits', () => {
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-1',
+          accountId: 'acc-checking',
+          date: '2026-09-01',
+          amountCents: -5000,
+          payeeId: 'p1',
+          categoryId: 'cat-groceries',
+          type: 'STANDARD',
+        },
+        {
+          id: 'tx-2',
+          accountId: 'acc-checking',
+          date: '2026-09-02',
+          amountCents: -8000,
+          payeeId: 'p2',
+          categoryId: null,
+          type: 'SPLIT',
+          splits: [
+            { id: 's1', categoryId: 'cat-groceries', amountCents: -3000 },
+            { id: 's2', categoryId: 'cat-rent', amountCents: -5000 },
+          ],
+        },
+      ];
+
+      // cat-groceries tiene 1 transacción simple + 1 en split = 2 referencias
+      expect(countCategoryUsage('cat-groceries', transactions)).toBe(2);
+      // cat-rent tiene 1 split = 1 referencia
+      expect(countCategoryUsage('cat-rent', transactions)).toBe(1);
+      // cat-dining tiene 0 referencias
+      expect(countCategoryUsage('cat-dining', transactions)).toBe(0);
+    });
+
+    it('debe reasignar limpiamente transacciones y splits a la categoría destino sin perder registros', () => {
+      const transactions: Transaction[] = [
+        {
+          id: 'tx-1',
+          accountId: 'acc-checking',
+          date: '2026-09-01',
+          amountCents: -5000,
+          payeeId: 'p1',
+          categoryId: 'cat-groceries',
+          type: 'STANDARD',
+        },
+        {
+          id: 'tx-2',
+          accountId: 'acc-checking',
+          date: '2026-09-02',
+          amountCents: -8000,
+          payeeId: 'p2',
+          categoryId: null,
+          type: 'SPLIT',
+          splits: [
+            { id: 's1', categoryId: 'cat-groceries', amountCents: -3000 },
+            { id: 's2', categoryId: 'cat-rent', amountCents: -5000 },
+          ],
+        },
+      ];
+
+      const reallocated = reassignCategoryInTransactions('cat-groceries', 'cat-dining', transactions);
+
+      // Ahora cat-groceries debe tener 0 referencias
+      expect(countCategoryUsage('cat-groceries', reallocated)).toBe(0);
+      // cat-dining debe tener 2 referencias
+      expect(countCategoryUsage('cat-dining', reallocated)).toBe(2);
+      // La transacción simple ahora apunta a cat-dining
+      expect(reallocated[0].categoryId).toBe('cat-dining');
+      // El split correspondiente ahora apunta a cat-dining
+      expect(reallocated[1].splits?.[0].categoryId).toBe('cat-dining');
+    });
+
+    it('debe consolidar asignaciones presupuestarias al reasignar una categoría para conservar la ecuación de YNAB', () => {
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-09', categoryId: 'cat-groceries', assignedCents: 30000 }, // $300
+        { month: '2026-09', categoryId: 'cat-dining', assignedCents: 10000 },    // $100
+        { month: '2026-10', categoryId: 'cat-groceries', assignedCents: 25000 }, // $250
+      ];
+
+      const consolidated = reassignCategoryAssignments('cat-groceries', 'cat-dining', assignments);
+
+      // cat-groceries ya no debe tener asignaciones
+      expect(consolidated.find((a) => a.categoryId === 'cat-groceries')).toBeUndefined();
+
+      // cat-dining en 2026-09 debe tener $300 + $100 = $400 (40000 centavos)
+      const assignSep = consolidated.find((a) => a.categoryId === 'cat-dining' && a.month === '2026-09');
+      expect(assignSep?.assignedCents).toBe(40000);
+
+      // cat-dining en 2026-10 debe recibir los $250 (25000 centavos)
+      const assignOct = consolidated.find((a) => a.categoryId === 'cat-dining' && a.month === '2026-10');
+      expect(assignOct?.assignedCents).toBe(25000);
+
+      // La suma total asignada permanece idéntica ($650 en total)
+      const originalTotal = assignments.reduce((sum, a) => sum + a.assignedCents, 0);
+      const newTotal = consolidated.reduce((sum, a) => sum + a.assignedCents, 0);
+      expect(newTotal).toBe(originalTotal);
+    });
   });
 });
