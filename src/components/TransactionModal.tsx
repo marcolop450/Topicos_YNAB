@@ -230,7 +230,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8">
+      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-visible my-8">
         {/* Cabecera del Modal */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
           <h3 className="text-base font-bold text-slate-800">
@@ -412,7 +412,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
             <AmountCalculatorInput
               valueCents={amountCents}
-              onChangeCents={setAmountCents}
+              onChangeCents={(cents) => {
+                setAmountCents(cents);
+                if (
+                  isSplit &&
+                  splits.length === 1 &&
+                  (splits[0].amountCents === 0 || splits[0].amountCents === amountCents)
+                ) {
+                  setSplits([{ ...splits[0], amountCents: cents }]);
+                }
+              }}
               isExpense={isExpense}
               placeholder="0.00"
             />

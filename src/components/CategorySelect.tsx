@@ -40,6 +40,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
         setIsOpen(false);
         setIsCreatingInline(false);
         setIsCreatingGroup(false);
+        setSearch('');
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -69,8 +70,11 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
     setIsCreatingInline(true);
   };
 
-  const handleConfirmInlineCreate = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmInlineCreate = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!newCatName.trim()) return;
 
     let targetGroupId = selectedGroupId;
@@ -94,12 +98,15 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
   };
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
+    <div className={`relative w-full ${isOpen ? 'z-50' : 'z-10'}`} ref={dropdownRef}>
       {/* Botón trigger del selector */}
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          setSearch('');
+        }}
         className={`w-full flex items-center justify-between px-3 py-2 bg-white text-slate-900 border rounded-lg text-sm text-left transition-all ${
           isOpen ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-300 hover:border-slate-400'
         } ${disabled ? 'bg-slate-100 cursor-not-allowed text-slate-400' : ''}`}
@@ -146,8 +153,18 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                 {showReadyToAssign && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       onSelectCategory(READY_TO_ASSIGN_CATEGORY_ID);
+                      setSearch('');
+                      setIsOpen(false);
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectCategory(READY_TO_ASSIGN_CATEGORY_ID);
+                      setSearch('');
                       setIsOpen(false);
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-emerald-700 hover:bg-emerald-50 font-medium transition-colors ${
@@ -176,8 +193,18 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                             <button
                               key={cat.id}
                               type="button"
-                              onClick={() => {
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 onSelectCategory(cat.id);
+                                setSearch('');
+                                setIsOpen(false);
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onSelectCategory(cat.id);
+                                setSearch('');
                                 setIsOpen(false);
                               }}
                               className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-left text-slate-700 hover:bg-slate-100 transition-colors ${
@@ -216,7 +243,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
             </>
           ) : (
             /* Formulario In-Line para Crear Categoría y/o Grupo Padre */
-            <form onSubmit={handleConfirmInlineCreate} className="p-3 bg-white space-y-3">
+            <div className="p-3 bg-white space-y-3">
               <div className="flex items-center justify-between border-b pb-2">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center">
                   <FolderPlus className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
@@ -238,10 +265,16 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                 <input
                   type="text"
                   autoFocus
-                  required
                   placeholder="ej. Gimnasio, Netflix..."
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleConfirmInlineCreate();
+                    }
+                  }}
                   className="w-full px-2.5 py-1.5 text-xs border rounded-md outline-none focus:border-blue-500"
                 />
               </div>
@@ -288,10 +321,16 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                   </div>
                   <input
                     type="text"
-                    required
                     placeholder="ej. Salud y Bienestar"
                     value={newGroupName}
                     onChange={(e) => setNewGroupName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleConfirmInlineCreate();
+                      }
+                    }}
                     className="w-full px-2.5 py-1.5 text-xs border border-blue-200 rounded-md outline-none bg-white focus:border-blue-500"
                   />
                 </div>
@@ -306,13 +345,18 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleConfirmInlineCreate();
+                  }}
                   className="px-3 py-1 text-xs bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors shadow-sm"
                 >
                   Guardar y Seleccionar
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </div>
       )}

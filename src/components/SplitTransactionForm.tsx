@@ -35,13 +35,26 @@ export const SplitTransactionForm: React.FC<SplitTransactionFormProps> = ({
     // Característica UX estrella de YNAB: Auto-completar el split con el remanente exacto
     const defaultAmountCents = remainingCents !== 0 ? remainingCents : 0;
 
+    // Buscar una categoría que no esté ya seleccionada en las líneas actuales para evitar duplicados por defecto
+    const unusedCategory = categories.find((c) => !splits.some((s) => s.categoryId === c.id));
+    const defaultCatId = unusedCategory ? unusedCategory.id : (categories[1]?.id || categories[0]?.id || '');
+
     const newSplit: TransactionSplit = {
       id: `split-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      categoryId: categories[0]?.id || '',
+      categoryId: defaultCatId,
       amountCents: defaultAmountCents,
       memo: '',
     };
     onChangeSplits([...splits, newSplit]);
+  };
+
+  const handleAutoFillRemaining = (targetIndex?: number) => {
+    if (remainingCents === 0) return;
+    const idx = targetIndex !== undefined ? targetIndex : splits.length - 1;
+    if (idx >= 0 && idx < splits.length) {
+      const currentAmount = splits[idx].amountCents || 0;
+      handleUpdateSplit(idx, { amountCents: currentAmount + remainingCents });
+    }
   };
 
   const handleUpdateSplit = (index: number, updated: Partial<TransactionSplit>) => {
@@ -76,7 +89,8 @@ export const SplitTransactionForm: React.FC<SplitTransactionFormProps> = ({
         {splits.map((split, index) => (
           <div
             key={split.id}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs"
+            style={{ zIndex: splits.length - index + 1 }}
+            className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs"
           >
             <div className="flex-1 min-w-[180px]">
               <CategorySelect
@@ -130,13 +144,13 @@ export const SplitTransactionForm: React.FC<SplitTransactionFormProps> = ({
           <div>
             <span className="text-slate-500">Monto Total: </span>
             <span className="font-mono font-bold text-slate-800">
-              {Currency.format(totalAmountCents)}
+              {Currency.format(Math.abs(totalAmountCents))}
             </span>
           </div>
           <div>
             <span className="text-slate-500">Asignado: </span>
             <span className="font-mono font-bold text-slate-800">
-              {Currency.format(assignedCents)}
+              {Currency.format(Math.abs(assignedCents))}
             </span>
           </div>
         </div>
@@ -149,10 +163,18 @@ export const SplitTransactionForm: React.FC<SplitTransactionFormProps> = ({
               Completamente Balanceado ($0.00 restante)
             </span>
           ) : (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+            <button
+              type="button"
+              onClick={() => handleAutoFillRemaining()}
+              title="Haz clic para auto-completar el restante en la última línea"
+              className="inline-flex items-center px-2.5 py-1 rounded-full font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
+            >
               <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-600" />
-              Restante por asignar: {Currency.format(remainingCents)}
-            </span>
+              Restante por asignar: {Currency.format(Math.abs(remainingCents))}
+              <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                Auto-completar
+              </span>
+            </button>
           )}
         </div>
       </div>
