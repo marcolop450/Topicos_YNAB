@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Split, AlertCircle } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Split, AlertCircle, Tag } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
-import { Transaction, TransactionType, READY_TO_ASSIGN_CATEGORY_ID, Currency, TransactionSplit } from '../types';
+import {
+  Transaction,
+  TransactionType,
+  READY_TO_ASSIGN_CATEGORY_ID,
+  Currency,
+  TransactionSplit,
+  FlagColor,
+} from '../types';
 import { AmountCalculatorInput } from './AmountCalculatorInput';
 import { CategorySelect } from './CategorySelect';
 import { SplitTransactionForm } from './SplitTransactionForm';
 import { validateTransfer, validateSplitTransaction } from '../engine/budgetEngine';
+import { getFlagsConfig, FlagItem } from '../utils/flagsConfig';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -44,9 +52,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [splits, setSplits] = useState<TransactionSplit[]>([]);
   const [incomeDestination, setIncomeDestination] = useState<'RTA' | 'CATEGORY'>('RTA');
   const [formError, setFormError] = useState<string | null>(null);
+  const [flagColor, setFlagColor] = useState<FlagColor | null>(null);
+  const [availableFlags, setAvailableFlags] = useState<FlagItem[]>(() => getFlagsConfig());
 
   // Inicializar o resetear formulario
   useEffect(() => {
+    setAvailableFlags(getFlagsConfig());
     if (editingTransaction) {
       setTxType(editingTransaction.type);
       setIsExpense(editingTransaction.amountCents < 0);
@@ -63,6 +74,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setIncomeDestination(
         editingTransaction.categoryId === READY_TO_ASSIGN_CATEGORY_ID ? 'RTA' : 'CATEGORY'
       );
+      setFlagColor(editingTransaction.flagColor || null);
     } else {
       // Valores por defecto para nueva transacción
       setTxType('STANDARD');
@@ -77,6 +89,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setMemo('');
       setSplits([]);
       setIncomeDestination('RTA');
+      setFlagColor(null);
     }
     setFormError(null);
   }, [editingTransaction, isOpen, accounts, categories, payees]);
@@ -127,6 +140,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           amountCents: -Math.abs(amountCents),
           date,
           memo,
+          flagColor,
         });
       } else {
         addTransaction({
@@ -138,6 +152,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           categoryId: null,
           type: 'TRANSFER',
           memo,
+          flagColor,
         });
       }
       onClose();
@@ -167,6 +182,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           type: 'SPLIT',
           splits,
           memo,
+          flagColor,
         });
       } else {
         addTransaction({
@@ -178,6 +194,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           type: 'SPLIT',
           splits,
           memo,
+          flagColor,
         });
       }
       onClose();
@@ -212,6 +229,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         type: 'STANDARD',
         splits: undefined,
         memo,
+        flagColor,
       });
     } else {
       addTransaction({
@@ -222,6 +240,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         categoryId: finalCategoryId,
         type: 'STANDARD',
         memo,
+        flagColor,
       });
     }
 
@@ -538,6 +557,45 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               onChange={(e) => setMemo(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500"
             />
+          </div>
+
+          {/* Fila 6: Bandera / Etiqueta de Color (Personalizable) */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center">
+              <Tag className="w-3.5 h-3.5 mr-1 text-purple-600" />
+              Bandera / Etiqueta de Color
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setFlagColor(null)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                  flagColor === null
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Sin Bandera
+              </button>
+              {availableFlags.map((flag) => {
+                const isSelected = flagColor === flag.id;
+                return (
+                  <button
+                    key={flag.id}
+                    type="button"
+                    onClick={() => setFlagColor(flag.id)}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all ${
+                      isSelected
+                        ? `${flag.badgeClass} ring-2 ring-offset-1 ring-purple-400 shadow-xs font-extrabold`
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-2.5 h-2.5 rounded-full ${flag.dotClass}`} />
+                    <span>{flag.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Botones de Acción */}

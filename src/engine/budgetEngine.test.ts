@@ -11,6 +11,7 @@ import {
   reassignCategoryInTransactions,
   reassignCategoryAssignments,
   calculateMonthlyChain,
+  calculateTargetProgress,
 } from './budgetEngine';
 import {
   Account,
@@ -20,6 +21,7 @@ import {
   READY_TO_ASSIGN_CATEGORY_ID,
   TransactionSplit,
   Currency,
+  CategoryTarget,
 } from '../types';
 
 describe('Budget Engine - Lógica de Dominio y Casos Borde YNAB', () => {
@@ -518,6 +520,154 @@ describe('Budget Engine - Lógica de Dominio y Casos Borde YNAB', () => {
 
         expect(totalCash).toBe(mBudget.readyToAssignCents + totalAvailable);
       }
+    });
+  });
+
+  describe('Category Targets (Metas de Ahorro)', () => {
+    it('debe manejar correctamente cuando no existe meta definida', () => {
+      const result = calculateTargetProgress(undefined, {
+        categoryId: 'cat-1',
+        assignedCents: 5000,
+        activityCents: 0,
+        availableCents: 5000,
+        isOverspent: false,
+      });
+
+      expect(result.status).toBe('NO_TARGET');
+      expect(result.neededCents).toBe(0);
+      expect(result.percentage).toBe(0);
+    });
+
+    it('debe calcular estado UNDERFUNDED cuando lo asignado es menor que la meta', () => {
+      const target: CategoryTarget = {
+        id: 't-1',
+        categoryId: 'cat-1',
+        targetAmountCents: 10000, // $100.00
+        targetType: 'MONTHLY_NEEDED',
+        dueDayOfMonth: 31,
+      };
+
+      const result = calculateTargetProgress(target, {
+        categoryId: 'cat-1',
+        assignedCents: 4000, // $40.00 asignado
+        activityCents: 0,
+        availableCents: 4000,
+        isOverspent: false,
+      });
+
+      expect(result.status).toBe('UNDERFUNDED');
+      expect(result.neededCents).toBe(6000); // Faltan $60.00
+      expect(result.percentage).toBe(40); // 40%
+      expect(result.dueDayOfMonth).toBe(31);
+    });
+
+    it('debe calcular estado FUNDED cuando lo asignado es igual o mayor a la meta', () => {
+      const target: CategoryTarget = {
+        id: 't-2',
+        categoryId: 'cat-2',
+        targetAmountCents: 8000, // $80.00
+        targetType: 'MONTHLY_NEEDED',
+      };
+
+      const resultExact = calculateTargetProgress(target, {
+        categoryId: 'cat-2',
+        assignedCents: 8000, // $80.00
+        activityCents: -2000,
+        availableCents: 6000,
+        isOverspent: false,
+      });
+      expect(resultExact.status).toBe('FUNDED');
+      expect(resultExact.neededCents).toBe(0);
+      expect(resultExact.percentage).toBe(100);
+
+      // Superavit asignado
+      const resultSurplus = calculateTargetProgress(target, {
+        categoryId: 'cat-2',
+        assignedCents: 10000, // $100.00
+        activityCents: 0,
+        availableCents: 10000,
+        isOverspent: false,
+      });
+      expect(resultSurplus.status).toBe('FUNDED');
+      expect(resultSurplus.neededCents).toBe(0);
+      expect(resultSurplus.percentage).toBe(100);
+    });
+
+    it('debe marcar OVERSPENT si la categoría tiene saldo negativo aunque esté asignada', () => {
+      const target: CategoryTarget = {
+        id: 't-3',
+        categoryId: 'cat-3',
+        targetAmountCents: 5000,
+        targetType: 'MONTHLY_NEEDED',
+      };
+
+      const result = calculateTargetProgress(target, {
+        categoryId: 'cat-3',
+        assignedCents: 5000,
+        activityCents: -7000,
+        availableCents: -2000,
+        isOverspent: true,
+      });
+
+      expect(result.status).toBe('OVERSPENT');
+    });
+  });
+
+  describe('Simulador Bancario y Conservación de Fondos', () => {
+    it('debe conservar la ecuación fundamental tras simular inyección de nómina y gastos automáticos', () => {
+      const accounts: Account[] = [
+        { id: 'acc-sim', name: 'Cuenta Simulador', type: 'CHECKING', initialBalanceCents: 100000, isActive: true }, // $1,000.00
+      ];
+      const categories: Category[] = [
+        { id: 'cat-food', groupId: 'g1', name: 'Alimentos', sortOrder: 1 },
+      ];
+      const assignments: BudgetAssignment[] = [
+        { month: '2026-09', categoryId: 'cat-food', assignedCents: 30000 }, // Asignar $300 a comida
+      ];
+
+      // 1. Simular depósito de sueldo de $2,000 inyectando a Ready to Assign
+      const salaryTx: Transaction = {
+        id: 'tx-sim-salary',
+        accountId: 'acc-sim',
+        date: '2026-09-02',
+        amountCents: 200000,
+        payeeId: 'p-empresa',
+        categoryId: READY_TO_ASSIGN_CATEGORY_ID,
+        type: 'STANDARD',
+      };
+
+      // 2. Simular gasto en comercio de $75 en categoría Alimentos
+      const expenseTx: Transaction = {
+        id: 'tx-sim-expense',
+        accountId: 'acc-sim',
+        date: '2026-09-03',
+        amountCents: -7500,
+        payeeId: 'p-mercado',
+        categoryId: 'cat-food',
+        type: 'STANDARD',
+      };
+
+      const transactions = [salaryTx, expenseTx];
+      const monthBudget = calculateMonthlyChain(categories, accounts, transactions, assignments, '2026-09');
+      const accBalances = calculateAccountBalances(accounts, transactions);
+
+      const totalCashInAccounts = Object.values(accBalances).reduce((a, b) => a + b, 0);
+      const totalAvailableInCategories = Object.values(monthBudget.categoryBalances).reduce(
+        (a, b) => a + b.availableCents,
+        0
+      );
+
+      // Total cuentas = $1,000 + $2,000 - $75 = $2,925.00
+      expect(totalCashInAccounts).toBe(292500);
+
+      // Comida disponible = $300 - $75 = $225.00
+      expect(monthBudget.categoryBalances['cat-food'].availableCents).toBe(22500);
+
+      // Listo para Asignar = $1,000 + $2,000 - $300 = $2,700.00
+      expect(monthBudget.readyToAssignCents).toBe(270000);
+
+      // Conservación estricta: Total Cuentas === RTA + Total Disponible en Sobres
+      expect(totalCashInAccounts).toBe(monthBudget.readyToAssignCents + totalAvailableInCategories);
     });
   });
 });

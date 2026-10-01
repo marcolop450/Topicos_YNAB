@@ -6,17 +6,22 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Outfit"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
       colors: {
         ynab: {
           blue: {
-            DEFAULT: '#1c4482',
-            light: '#2d68c4',
-            dark: '#143160',
+            DEFAULT: '#1b3a6b',
+            light: '#255494',
+            dark: '#102444',
           },
           green: {
-            DEFAULT: '#16a34a',
-            light: '#dcfce7',
-            dark: '#15803d',
+            DEFAULT: '#059669',
+            light: '#d1fae5',
+            dark: '#047857',
           },
           red: {
             DEFAULT: '#dc2626',
@@ -24,19 +29,10 @@ export default {
             dark: '#b91c1c',
           },
           yellow: {
-            DEFAULT: '#ca8a04',
-            light: '#fef9c3',
-            dark: '#a16207',
+            DEFAULT: '#d97706',
+            light: '#fef3c7',
+            dark: '#b45309',
           },
-          gray: {
-            50: '#f8fafc',
-            100: '#f1f5f9',
-            200: '#e2e8f0',
-            300: '#cbd5e1',
-            600: '#475569',
-            800: '#1e293b',
-            900: '#0f172a',
-          }
         }
       }
     },

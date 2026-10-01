@@ -6,6 +6,9 @@ import {
   CategoryBalance,
   READY_TO_ASSIGN_CATEGORY_ID,
   TransactionSplit,
+  CategoryTarget,
+  TargetProgress,
+  TargetStatus,
 } from '../types';
 
 /**
@@ -403,5 +406,54 @@ export function reassignCategoryAssignments(
   }
 
   return updatedAssignments;
+}
+
+/**
+ * Calcula el estado y progreso de la meta de ahorro (Target) para una categoría en el mes actual.
+ * Estados:
+ * - OVERSPENT: si la categoría tiene sobregasto (saldo disponible < 0).
+ * - NO_TARGET: si no hay meta definida o su monto es <= 0.
+ * - FUNDED: si lo asignado en el mes cubre o supera el monto meta.
+ * - UNDERFUNDED: si lo asignado es menor al monto meta.
+ */
+export function calculateTargetProgress(
+  target: CategoryTarget | undefined,
+  balance: CategoryBalance | undefined
+): TargetProgress {
+  if (!target || target.targetAmountCents <= 0) {
+    return {
+      status: 'NO_TARGET',
+      targetAmountCents: 0,
+      assignedCents: balance?.assignedCents || 0,
+      neededCents: 0,
+      percentage: 0,
+      targetType: 'MONTHLY_NEEDED',
+    };
+  }
+
+  const assignedCents = balance?.assignedCents || 0;
+  const targetAmountCents = target.targetAmountCents;
+  const neededCents = Math.max(0, targetAmountCents - assignedCents);
+  const percentage = Math.min(
+    100,
+    Math.max(0, Math.round((assignedCents / targetAmountCents) * 100))
+  );
+
+  let status: TargetStatus = 'UNDERFUNDED';
+  if (balance?.isOverspent) {
+    status = 'OVERSPENT';
+  } else if (assignedCents >= targetAmountCents) {
+    status = 'FUNDED';
+  }
+
+  return {
+    status,
+    targetAmountCents,
+    assignedCents,
+    neededCents,
+    percentage,
+    dueDayOfMonth: target.dueDayOfMonth,
+    targetType: target.targetType,
+  };
 }
 

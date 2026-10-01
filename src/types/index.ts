@@ -1,6 +1,72 @@
 // Constante para la supercategoría global
 export const READY_TO_ASSIGN_CATEGORY_ID = 'READY_TO_ASSIGN';
 
+export type UserRole = 'client' | 'admin';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  planName: string;
+  isFree?: boolean;
+  trialDaysRemaining?: number;
+  createdAt: string;
+}
+
+export type TargetType = 'MONTHLY_NEEDED' | 'TARGET_BALANCE';
+
+export type TargetStatus = 'FUNDED' | 'UNDERFUNDED' | 'OVERSPENT' | 'NO_TARGET';
+
+export interface CategoryTarget {
+  id: string;
+  categoryId: string;
+  targetAmountCents: number;
+  targetType: TargetType;
+  dueDayOfMonth?: number;
+}
+
+export interface TargetProgress {
+  status: TargetStatus;
+  targetAmountCents: number;
+  assignedCents: number;
+  neededCents: number;
+  percentage: number;
+  dueDayOfMonth?: number;
+  targetType: TargetType;
+}
+
+export interface SupportMessage {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  sender: 'client' | 'admin';
+  content: string;
+  status: 'open' | 'answered';
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userEmail: string;
+  action: string;
+  details: string;
+  timestamp: string;
+}
+
+export interface BankEvent {
+  id: string;
+  date: string;
+  description: string;
+  amountCents: number;
+  type: 'INFLOW' | 'OUTFLOW';
+  accountId: string;
+  categoryId?: string;
+  status: 'CLEARED' | 'PENDING';
+}
+
 export type AccountType = 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD' | 'CASH';
 
 export interface Account {
@@ -40,6 +106,8 @@ export interface TransactionSplit {
 
 export type TransactionType = 'STANDARD' | 'SPLIT' | 'TRANSFER';
 
+export type FlagColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
 export interface Transaction {
   id: string;
   accountId: string;
@@ -52,6 +120,7 @@ export interface Transaction {
   transferAccountId?: string | null; // Cuenta contraparte en caso de TRANSFER
   transferTransactionId?: string | null; // ID de la transacción vinculada
   splits?: TransactionSplit[]; // Desglose si type === 'SPLIT'
+  flagColor?: FlagColor | null; // Color de bandera YNAB
 }
 
 export interface BudgetAssignment {
@@ -86,3 +155,4 @@ export const Currency = {
     return isNegative ? `-$${formatted}` : `$${formatted}`;
   },
 };
+

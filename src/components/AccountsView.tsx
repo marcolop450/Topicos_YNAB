@@ -13,9 +13,11 @@ import {
   PiggyBank,
   Banknote,
   CreditCard,
+  Tag,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { AccountType, Currency, Transaction } from '../types';
+import { getFlagById, getFlagsConfig } from '../utils/flagsConfig';
 
 interface AccountsViewProps {
   onOpenNewTransaction: () => void;
@@ -38,6 +40,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFlag, setSelectedFlag] = useState<string>('ALL');
   const [newAccountModal, setNewAccountModal] = useState(false);
   const [newAccName, setNewAccName] = useState('');
   const [newAccType, setNewAccType] = useState<AccountType>('CHECKING');
@@ -50,7 +53,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     const memo = tx.memo?.toLowerCase() || '';
     const query = searchTerm.toLowerCase();
     const matchesSearch = payee.includes(query) || memo.includes(query);
-    return matchesAccount && matchesSearch;
+    const matchesFlag =
+      selectedFlag === 'ALL'
+        ? true
+        : selectedFlag === 'NONE'
+        ? !tx.flagColor
+        : tx.flagColor === selectedFlag;
+    return matchesAccount && matchesSearch && matchesFlag;
   });
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
@@ -148,6 +157,17 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               </button>
             );
           })}
+          {accounts.length === 0 && (
+            <div className="p-3 text-center bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-500 space-y-2">
+              <p className="font-medium">No tienes cuentas registradas.</p>
+              <button
+                onClick={() => setNewAccountModal(true)}
+                className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors"
+              >
+                + Crear Primera Cuenta
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -169,9 +189,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center space-x-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             {/* Buscador */}
-            <div className="relative flex-1 sm:w-60">
+            <div className="relative flex-1 sm:w-56">
               <Filter className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
@@ -180,6 +200,24 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500"
               />
+            </div>
+
+            {/* Selector de Bandera */}
+            <div className="relative flex items-center">
+              <Tag className="w-3.5 h-3.5 absolute left-2.5 text-purple-600 pointer-events-none" />
+              <select
+                value={selectedFlag}
+                onChange={(e) => setSelectedFlag(e.target.value)}
+                className="pl-7 pr-2.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 font-medium text-slate-700"
+              >
+                <option value="ALL">Todas las banderas</option>
+                <option value="NONE">Sin bandera</option>
+                {getFlagsConfig().map((f) => (
+                  <option key={f.id} value={f.id}>
+                    ● {f.label}: {f.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <button
@@ -198,6 +236,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
+                  <th className="px-3 py-3 text-center w-28">Bandera</th>
                   <th className="px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Cuenta</th>
                   <th className="px-4 py-3">Beneficiario / Payee</th>
@@ -210,7 +249,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               <tbody className="divide-y divide-slate-100">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-10 text-slate-400">
+                    <td colSpan={8} className="text-center py-10 text-slate-400">
                       No hay transacciones registradas que coincidan con la búsqueda.
                     </td>
                   </tr>
@@ -254,8 +293,23 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       }
                     }
 
+                    const flag = getFlagById(tx.flagColor);
+
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                          {flag ? (
+                            <span
+                              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${flag.badgeClass}`}
+                              title={flag.name}
+                            >
+                              <span className={`w-2 h-2 rounded-full ${flag.dotClass}`} />
+                              <span className="max-w-[100px] truncate">{flag.name}</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono text-xs">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
                           {tx.date}
                         </td>

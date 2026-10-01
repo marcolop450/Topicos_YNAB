@@ -18,6 +18,8 @@ import { Currency, Category } from '../types';
 import { AmountCalculatorInput } from './AmountCalculatorInput';
 import { DeleteCategoryModal } from './DeleteCategoryModal';
 import { EditCategoryModal } from './EditCategoryModal';
+import { CategoryInspector } from './CategoryInspector';
+import { calculateTargetProgress } from '../engine/budgetEngine';
 
 export const BudgetView: React.FC = () => {
   const {
@@ -34,6 +36,7 @@ export const BudgetView: React.FC = () => {
     createGroup,
     toggleHideCategory,
     accountBalances,
+    targets,
   } = useBudget();
 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -44,6 +47,9 @@ export const BudgetView: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [showHiddenCategories, setShowHiddenCategories] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+
+  const selectedCategory = categories.find((c) => c.id === selectedCategoryId && !c.isHidden);
 
   // Navegación de meses
   const changeMonth = (delta: number) => {
@@ -184,17 +190,21 @@ export const BudgetView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Barra de Herramientas y Botón de Nuevo Grupo */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-slate-800">Sobres y Categorías de Presupuesto</h3>
-        <button
-          onClick={() => setNewGroupModal(true)}
-          className="inline-flex items-center px-3 py-1.5 text-xs font-bold bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors shadow-xs"
-        >
-          <FolderPlus className="w-4 h-4 mr-1.5 text-blue-600" />
-          + Nuevo Grupo de Categorías
-        </button>
-      </div>
+      {/* Contenedor Principal: Tabla de Presupuesto + Inspector Lateral */}
+      <div className="flex flex-col xl:flex-row gap-6 items-start">
+        {/* Columna Izquierda: Tabla de Presupuesto */}
+        <div className="flex-1 w-full space-y-6">
+          {/* 2. Barra de Herramientas y Botón de Nuevo Grupo */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-800">Sobres y Categorías de Presupuesto</h3>
+            <button
+              onClick={() => setNewGroupModal(true)}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-bold bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors shadow-xs"
+            >
+              <FolderPlus className="w-4 h-4 mr-1.5 text-blue-600" />
+              + Nuevo Grupo de Categorías
+            </button>
+          </div>
 
       {/* 3. Tabla Principal de Categorías por Grupo */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -305,18 +315,49 @@ export const BudgetView: React.FC = () => {
                       availableCents: 0,
                       isOverspent: false,
                     };
+                    const isSelected = category.id === selectedCategoryId;
+                    const target = targets.find((t) => t.categoryId === category.id);
+                    const targetProgress = calculateTargetProgress(target, balance);
 
                     return (
                       <div
                         key={category.id}
-                        className="grid grid-cols-12 px-6 py-2 items-center hover:bg-slate-50/70 transition-colors text-xs"
+                        onClick={() =>
+                          setSelectedCategoryId(isSelected ? null : category.id)
+                        }
+                        className={`grid grid-cols-12 px-6 py-2.5 items-center cursor-pointer transition-all text-xs ${
+                          isSelected
+                            ? 'bg-blue-50/90 border-l-4 border-blue-600 shadow-xs'
+                            : 'hover:bg-slate-50/70 border-l-4 border-transparent'
+                        }`}
                       >
-                        {/* Nombre de Categoría y Acciones */}
-                        <div className="col-span-5 sm:col-span-6 pl-6 flex items-center justify-between pr-2 group">
-                          <span className="font-medium text-slate-800 truncate" title={category.name}>
-                            {category.name}
-                          </span>
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 shrink-0 ml-2">
+                        {/* Nombre de Categoría, Meta rápida y Acciones */}
+                        <div className="col-span-5 sm:col-span-6 pl-4 flex items-center justify-between pr-2 group">
+                          <div className="flex items-center space-x-2 truncate">
+                            <span
+                              className={`truncate ${
+                                isSelected ? 'font-black text-blue-900' : 'font-medium text-slate-800'
+                              }`}
+                              title={category.name}
+                            >
+                              {category.name}
+                            </span>
+                            {target && targetProgress.status === 'UNDERFUNDED' && (
+                              <span className="hidden xl:inline-flex text-[10px] font-semibold text-amber-800 bg-amber-100/70 border border-amber-300/60 px-1.5 py-0.5 rounded">
+                                Falta {Currency.format(targetProgress.neededCents)} para el {targetProgress.dueDayOfMonth || 31}
+                              </span>
+                            )}
+                            {target && targetProgress.status === 'FUNDED' && (
+                              <span className="hidden xl:inline-flex text-[10px] font-semibold text-emerald-800 bg-emerald-100/70 border border-emerald-300/60 px-1.5 py-0.5 rounded">
+                                Meta cubierta
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 shrink-0 ml-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
                               onClick={() => setEditingCategory(category)}
@@ -345,7 +386,10 @@ export const BudgetView: React.FC = () => {
                         </div>
 
                         {/* Asignado (Con Calculadora Interactiva Inline) */}
-                        <div className="col-span-3 sm:col-span-2 text-right">
+                        <div
+                          className="col-span-3 sm:col-span-2 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <AmountCalculatorInput
                             valueCents={balance.assignedCents}
                             onChangeCents={(cents) =>
@@ -399,9 +443,31 @@ export const BudgetView: React.FC = () => {
                       </div>
                     );
                   })}
+                </div>
+              );
+            })}
+          {groups.length === 0 && (
+            <div className="py-16 px-6 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center shadow-xs">
+                <FolderPlus className="w-7 h-7" />
               </div>
-            );
-          })}
+              <div className="max-w-md mx-auto space-y-1.5">
+                <h4 className="font-display font-black text-slate-900 text-base">
+                  Tu presupuesto está limpio y listo para comenzar
+                </h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Crea tus primeros grupos de categorías (ej. «Gastos Fijos», «Comida y Supermercado», «Ahorros») para empezar a distribuir tu dinero en sobres.
+                </p>
+              </div>
+              <button
+                onClick={() => setNewGroupModal(true)}
+                className="inline-flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all hover:scale-105"
+              >
+                <FolderPlus className="w-4 h-4 mr-1.5" />
+                <span>Crear Primer Grupo</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -494,6 +560,20 @@ export const BudgetView: React.FC = () => {
           )}
         </div>
       )}
+        </div>
+
+        {/* Columna Derecha: Inspector de Metas y Detalles */}
+        {selectedCategory && (
+          <div className="w-full xl:w-96 shrink-0 xl:sticky xl:top-20">
+            <CategoryInspector
+              category={selectedCategory}
+              onClose={() => setSelectedCategoryId(null)}
+              onEditCategory={(cat) => setEditingCategory(cat)}
+              onDeleteCategory={(cat) => setDeletingCategory(cat)}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Modal para Crear Nuevo Grupo */}
       {newGroupModal && (

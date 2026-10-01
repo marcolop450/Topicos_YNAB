@@ -8,6 +8,7 @@ import {
   BudgetAssignment,
   CategoryBalance,
   AccountType,
+  CategoryTarget,
 } from '../types';
 import {
   calculateAccountBalances,
@@ -25,6 +26,7 @@ import {
   initialPayees,
   initialTransactions,
   initialAssignments,
+  initialTargets,
 } from '../data/seedData';
 
 interface BudgetContextType {
@@ -34,6 +36,7 @@ interface BudgetContextType {
   payees: Payee[];
   transactions: Transaction[];
   assignments: BudgetAssignment[];
+  targets: CategoryTarget[];
   currentMonth: string;
   setCurrentMonth: (month: string) => void;
 
@@ -50,6 +53,9 @@ interface BudgetContextType {
   updateTransaction: (id: string, updated: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
   assignBudget: (categoryId: string, month: string, cents: number) => void;
+  saveTarget: (target: Omit<CategoryTarget, 'id'> & { id?: string }) => void;
+  deleteTarget: (categoryId: string) => void;
+  autoAssignTarget: (categoryId: string, month: string) => void;
   createAccount: (name: string, type: AccountType, initialBalanceCents: number) => Account;
   createCategory: (name: string, groupId: string) => Category;
   updateCategory: (id: string, updated: Partial<Pick<Category, 'name' | 'groupId' | 'isHidden'>>) => void;
@@ -67,17 +73,23 @@ interface BudgetContextType {
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
+const getCurrentYearMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const STORAGE_KEYS = {
-  ACCOUNTS: 'ynab_accounts_v1',
-  GROUPS: 'ynab_groups_v1',
-  CATEGORIES: 'ynab_categories_v1',
-  PAYEES: 'ynab_payees_v1',
-  TRANSACTIONS: 'ynab_transactions_v1',
-  ASSIGNMENTS: 'ynab_assignments_v1',
+  ACCOUNTS: 'ynab_accounts_v2',
+  GROUPS: 'ynab_groups_v2',
+  CATEGORIES: 'ynab_categories_v2',
+  PAYEES: 'ynab_payees_v2',
+  TRANSACTIONS: 'ynab_transactions_v2',
+  ASSIGNMENTS: 'ynab_assignments_v2',
+  TARGETS: 'ynab_targets_v2',
 };
 
 export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Cargar estado inicial desde LocalStorage o desde datos semilla
+  // Cargar estado inicial desde LocalStorage o vacío por defecto
   const [accounts, setAccounts] = useState<Account[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ACCOUNTS);
     return saved ? JSON.parse(saved) : initialAccounts;
@@ -108,7 +120,12 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : initialAssignments;
   });
 
-  const [currentMonth, setCurrentMonth] = useState<string>('2026-09');
+  const [targets, setTargets] = useState<CategoryTarget[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TARGETS);
+    return saved ? JSON.parse(saved) : initialTargets;
+  });
+
+  const [currentMonth, setCurrentMonth] = useState<string>(() => getCurrentYearMonth());
 
   // Guardar en LocalStorage ante cada cambio
   useEffect(() => {
@@ -134,6 +151,10 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
   }, [assignments]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(targets));
+  }, [targets]);
 
   // Cálculos reactivos derivados en memoria
   const accountBalances = useMemo(
@@ -224,6 +245,36 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  const saveTarget = (targetData: Omit<CategoryTarget, 'id'> & { id?: string }) => {
+    setTargets((prev) => {
+      const existingIndex = prev.findIndex((t) => t.categoryId === targetData.categoryId);
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = {
+          ...copy[existingIndex],
+          ...targetData,
+          id: copy[existingIndex].id,
+        };
+        return copy;
+      }
+      const newTarget: CategoryTarget = {
+        ...targetData,
+        id: targetData.id || `target-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      };
+      return [...prev, newTarget];
+    });
+  };
+
+  const deleteTarget = (categoryId: string) => {
+    setTargets((prev) => prev.filter((t) => t.categoryId !== categoryId));
+  };
+
+  const autoAssignTarget = (categoryId: string, month: string) => {
+    const target = targets.find((t) => t.categoryId === categoryId);
+    if (!target) return;
+    assignBudget(categoryId, month, target.targetAmountCents);
+  };
+
   const createAccount = (name: string, type: AccountType, initialBalanceCents: number) => {
     const newAccount: Account = {
       id: `acc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -300,8 +351,9 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setAssignments((prev) => prev.filter((a) => a.categoryId !== id));
     }
 
-    // 2. Eliminar la categoría de la lista
+    // 2. Eliminar la categoría de la lista y su meta asociada
     setCategories((prev) => prev.filter((c) => c.id !== id));
+    setTargets((prev) => prev.filter((t) => t.categoryId !== id));
     return { success: true };
   };
 
@@ -348,7 +400,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setPayees(initialPayees);
     setTransactions(initialTransactions);
     setAssignments(initialAssignments);
-    setCurrentMonth('2026-09');
+    setTargets(initialTargets);
+    setCurrentMonth(getCurrentYearMonth());
   };
 
   const exportDataJson = () => {
@@ -360,6 +413,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         payees,
         transactions,
         assignments,
+        targets,
         currentMonth,
       },
       null,
@@ -377,6 +431,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (data.payees) setPayees(data.payees);
         setTransactions(data.transactions);
         if (data.assignments) setAssignments(data.assignments);
+        if (data.targets) setTargets(data.targets);
         if (data.currentMonth) setCurrentMonth(data.currentMonth);
         return true;
       }
@@ -395,6 +450,7 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         payees,
         transactions,
         assignments,
+        targets,
         currentMonth,
         setCurrentMonth,
         accountBalances,
@@ -407,6 +463,9 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateTransaction,
         deleteTransaction,
         assignBudget,
+        saveTarget,
+        deleteTarget,
+        autoAssignTarget,
         createAccount,
         createCategory,
         updateCategory,
