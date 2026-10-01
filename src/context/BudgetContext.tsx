@@ -189,7 +189,8 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         Math.abs(txData.amountCents),
         txData.date,
         payee.id,
-        txData.memo
+        txData.memo,
+        txData.time
       );
       setTransactions((prev) => [debitTx, creditTx, ...prev]);
     } else {
@@ -207,12 +208,13 @@ export const BudgetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (tx.id === id) {
           return { ...tx, ...updated };
         }
-        // Si es una transferencia vinculada, sincronizar monto o fecha en su contraparte
+        // Si es una transferencia vinculada, sincronizar monto, fecha u hora en su contraparte
         if (tx.transferTransactionId === id && updated.amountCents !== undefined) {
           return {
             ...tx,
             amountCents: -updated.amountCents,
             date: updated.date || tx.date,
+            time: updated.time !== undefined ? updated.time : tx.time,
           };
         }
         return tx;

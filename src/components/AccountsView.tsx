@@ -14,6 +14,7 @@ import {
   Banknote,
   CreditCard,
   Tag,
+  Clock,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { AccountType, Currency, Transaction } from '../types';
@@ -46,21 +47,27 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const [newAccType, setNewAccType] = useState<AccountType>('CHECKING');
   const [newAccBalance, setNewAccBalance] = useState('');
 
-  // Filtrado de transacciones
-  const filteredTransactions = transactions.filter((tx) => {
-    const matchesAccount = selectedAccountId === null || tx.accountId === selectedAccountId;
-    const payee = payees.find((p) => p.id === tx.payeeId)?.name.toLowerCase() || '';
-    const memo = tx.memo?.toLowerCase() || '';
-    const query = searchTerm.toLowerCase();
-    const matchesSearch = payee.includes(query) || memo.includes(query);
-    const matchesFlag =
-      selectedFlag === 'ALL'
-        ? true
-        : selectedFlag === 'NONE'
-        ? !tx.flagColor
-        : tx.flagColor === selectedFlag;
-    return matchesAccount && matchesSearch && matchesFlag;
-  });
+  // Filtrado y ordenamiento de transacciones por fecha y hora descendente
+  const filteredTransactions = transactions
+    .filter((tx) => {
+      const matchesAccount = selectedAccountId === null || tx.accountId === selectedAccountId;
+      const payee = payees.find((p) => p.id === tx.payeeId)?.name.toLowerCase() || '';
+      const memo = tx.memo?.toLowerCase() || '';
+      const query = searchTerm.toLowerCase();
+      const matchesSearch = payee.includes(query) || memo.includes(query);
+      const matchesFlag =
+        selectedFlag === 'ALL'
+          ? true
+          : selectedFlag === 'NONE'
+          ? !tx.flagColor
+          : tx.flagColor === selectedFlag;
+      return matchesAccount && matchesSearch && matchesFlag;
+    })
+    .sort((a, b) => {
+      const dtA = `${a.date} ${a.time || '00:00'}`;
+      const dtB = `${b.date} ${b.time || '00:00'}`;
+      return dtB.localeCompare(dtA);
+    });
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
   const totalAllAccounts = Object.values(accountBalances).reduce((a, b) => a + b, 0);
@@ -237,7 +244,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="px-3 py-3 text-center w-28">Bandera</th>
-                  <th className="px-4 py-3">Fecha</th>
+                  <th className="px-4 py-3">Fecha y Hora</th>
                   <th className="px-4 py-3">Cuenta</th>
                   <th className="px-4 py-3">Beneficiario / Payee</th>
                   <th className="px-4 py-3">Categoría / Sobre</th>
@@ -311,7 +318,15 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                           )}
                         </td>
                         <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
-                          {tx.date}
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800">{tx.date}</span>
+                            {tx.time ? (
+                              <span className="text-[11px] text-slate-400 font-sans flex items-center mt-0.5">
+                                <Clock className="w-3 h-3 mr-1 text-slate-400 shrink-0" />
+                                {tx.time}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">
                           {account?.name}

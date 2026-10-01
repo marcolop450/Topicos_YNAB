@@ -1,5 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, Split, AlertCircle, Tag } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  X,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ArrowLeftRight,
+  Split,
+  AlertCircle,
+  Tag,
+  Clock,
+  Search,
+  Plus,
+} from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import {
   Transaction,
@@ -38,6 +49,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     createPayee,
   } = useBudget();
 
+  const getCurrentTimeStr = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+
   // Estados del Formulario
   const [txType, setTxType] = useState<TransactionType>('STANDARD');
   const [isExpense, setIsExpense] = useState(true);
@@ -45,7 +61,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [accountId, setAccountId] = useState('');
   const [transferAccountId, setTransferAccountId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState(getCurrentTimeStr);
   const [payeeName, setPayeeName] = useState('');
+  const [showPayeeSuggestions, setShowPayeeSuggestions] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [amountCents, setAmountCents] = useState<number>(0);
   const [memo, setMemo] = useState('');
@@ -54,6 +72,33 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [flagColor, setFlagColor] = useState<FlagColor | null>(null);
   const [availableFlags, setAvailableFlags] = useState<FlagItem[]>(() => getFlagsConfig());
+
+  const payeeContainerRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar sugerencias al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (payeeContainerRef.current && !payeeContainerRef.current.contains(event.target as Node)) {
+        setShowPayeeSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Lista de payees sugeridos (excluyendo transferencias automáticas del sistema)
+  const filteredPayees = useMemo(() => {
+    const clean = payeeName.trim().toLowerCase();
+    return payees
+      .filter((p) => !p.name.startsWith('Transferencia a:'))
+      .filter((p) => !clean || p.name.toLowerCase().includes(clean))
+      .slice(0, 7);
+  }, [payees, payeeName]);
+
+  const hasExactPayeeMatch = useMemo(() => {
+    const clean = payeeName.trim().toLowerCase();
+    return payees.some((p) => p.name.trim().toLowerCase() === clean);
+  }, [payees, payeeName]);
 
   // Inicializar o resetear formulario
   useEffect(() => {
@@ -65,6 +110,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAccountId(editingTransaction.accountId);
       setTransferAccountId(editingTransaction.transferAccountId || '');
       setDate(editingTransaction.date);
+      setTime(editingTransaction.time || getCurrentTimeStr());
       const payee = payees.find((p) => p.id === editingTransaction.payeeId);
       setPayeeName(payee ? payee.name : '');
       setCategoryId(editingTransaction.categoryId || null);
@@ -83,6 +129,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAccountId(accounts[0]?.id || '');
       setTransferAccountId(accounts[1]?.id || '');
       setDate(new Date().toISOString().split('T')[0]);
+      setTime(getCurrentTimeStr());
       setPayeeName('');
       setCategoryId(categories[0]?.id || null);
       setAmountCents(0);
@@ -91,6 +138,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setIncomeDestination('RTA');
       setFlagColor(null);
     }
+    setShowPayeeSuggestions(false);
     setFormError(null);
   }, [editingTransaction, isOpen, accounts, categories, payees]);
 
@@ -139,6 +187,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           transferAccountId,
           amountCents: -Math.abs(amountCents),
           date,
+          time,
           memo,
           flagColor,
         });
@@ -147,6 +196,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           accountId,
           transferAccountId,
           date,
+          time,
           amountCents: -Math.abs(amountCents),
           payeeId: activePayeeId,
           categoryId: null,
@@ -176,6 +226,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         updateTransaction(editingTransaction.id, {
           accountId,
           date,
+          time,
           amountCents: finalTotal,
           payeeId: activePayeeId,
           categoryId: null,
@@ -188,6 +239,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         addTransaction({
           accountId,
           date,
+          time,
           amountCents: finalTotal,
           payeeId: activePayeeId,
           categoryId: null,
@@ -223,6 +275,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       updateTransaction(editingTransaction.id, {
         accountId,
         date,
+        time,
         amountCents: finalAmount,
         payeeId: activePayeeId,
         categoryId: finalCategoryId,
@@ -235,6 +288,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       addTransaction({
         accountId,
         date,
+        time,
         amountCents: finalAmount,
         payeeId: activePayeeId,
         categoryId: finalCategoryId,
@@ -323,16 +377,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Fila 1: Cuenta y Fecha */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          {/* Fila 1: Cuenta, Fecha y Hora */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-6">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 {txType === 'TRANSFER' ? 'Cuenta Origen (Débito)' : 'Cuenta'}
               </label>
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium shadow-xs"
               >
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
@@ -342,7 +396,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </select>
             </div>
 
-            <div>
+            <div className="sm:col-span-3">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Fecha
               </label>
@@ -351,12 +405,25 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium shadow-xs"
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                Hora
+              </label>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium shadow-xs"
               />
             </div>
           </div>
 
-          {/* Fila 2: En caso de Transferencia -> Cuenta Destino */}
+          {/* Fila 2: En caso de Transferencia -> Cuenta Destino | Gasto/Ingreso -> Beneficiario Autocompletable */}
           {txType === 'TRANSFER' ? (
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -365,7 +432,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <select
                 value={transferAccountId}
                 onChange={(e) => setTransferAccountId(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium"
+                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium shadow-xs"
               >
                 {accounts
                   .filter((a) => a.id !== accountId)
@@ -380,18 +447,83 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </p>
             </div>
           ) : (
-            /* En caso de Gasto/Ingreso -> Beneficiario */
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                {isExpense ? 'Beneficiario / Comercio (Payee)' : 'Origen del Dinero'}
+            <div ref={payeeContainerRef} className="relative">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span>{isExpense ? 'Beneficiario / Comercio (Payee)' : 'Origen del Dinero'}</span>
+                {payeeName.trim() && (
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    {hasExactPayeeMatch ? 'Beneficiario registrado' : 'Nuevo beneficiario'}
+                  </span>
+                )}
               </label>
-              <input
-                type="text"
-                placeholder={isExpense ? 'ej. PedidosYa, Netflix, Carrefour...' : 'ej. Empresa Empleadora, Juan Pérez...'}
-                value={payeeName}
-                onChange={(e) => setPayeeName(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={
+                    isExpense
+                      ? 'ej. PedidosYa, Netflix, Carrefour, Farmacity...'
+                      : 'ej. Sueldo Empleador, Transferencia Juan Pérez...'
+                  }
+                  value={payeeName}
+                  onChange={(e) => {
+                    setPayeeName(e.target.value);
+                    setShowPayeeSuggestions(true);
+                  }}
+                  onFocus={() => setShowPayeeSuggestions(true)}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-medium pr-8 shadow-xs"
+                  autoComplete="off"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              </div>
+
+              {/* Menú de Autocompletado Flotante */}
+              {showPayeeSuggestions && (filteredPayees.length > 0 || (payeeName.trim() && !hasExactPayeeMatch)) && (
+                <div className="absolute left-0 right-0 z-50 mt-1 max-h-52 overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-xl py-1 text-xs animate-in fade-in duration-100">
+                  {filteredPayees.length > 0 && (
+                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border-b border-slate-100">
+                      Beneficiarios Existentes
+                    </div>
+                  )}
+                  {filteredPayees.map((p) => {
+                    const isSelected = p.name.toLowerCase() === payeeName.trim().toLowerCase();
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onMouseDown={() => {
+                          setPayeeName(p.name);
+                          setShowPayeeSuggestions(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                          isSelected
+                            ? 'bg-blue-50 text-blue-700 font-bold'
+                            : 'hover:bg-slate-50 text-slate-700 font-medium'
+                        }`}
+                      >
+                        <span className="truncate">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 font-normal ml-2 shrink-0">
+                          Existente
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {payeeName.trim() && !hasExactPayeeMatch && (
+                    <button
+                      type="button"
+                      onMouseDown={() => {
+                        setShowPayeeSuggestions(false);
+                      }}
+                      className="w-full text-left px-3 py-2.5 bg-blue-50/60 hover:bg-blue-100/70 text-blue-700 font-semibold flex items-center border-t border-blue-100 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1.5 shrink-0 text-blue-600" />
+                      <span className="truncate">
+                        Registrar nuevo beneficiario: <strong className="font-bold">"{payeeName.trim()}"</strong>
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

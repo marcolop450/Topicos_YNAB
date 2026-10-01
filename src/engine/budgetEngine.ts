@@ -291,7 +291,8 @@ export function createTransferPair(
   amountCents: number,
   date: string,
   payeeId: string,
-  memo?: string
+  memo?: string,
+  time?: string
 ): { debitTx: Transaction; creditTx: Transaction } {
   const debitTxId = `tx-transfer-out-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const creditTxId = `tx-transfer-in-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -300,6 +301,7 @@ export function createTransferPair(
     id: debitTxId,
     accountId: sourceAccountId,
     date,
+    time,
     amountCents: -Math.abs(amountCents),
     payeeId,
     categoryId: null, // Transferencias on-budget no llevan categoría
@@ -313,6 +315,7 @@ export function createTransferPair(
     id: creditTxId,
     accountId: targetAccountId,
     date,
+    time,
     amountCents: Math.abs(amountCents),
     payeeId,
     categoryId: null,

@@ -112,6 +112,7 @@ export interface Transaction {
   id: string;
   accountId: string;
   date: string; // Formato ISO 'YYYY-MM-DD'
+  time?: string; // Formato 'HH:mm'
   amountCents: number; // Negativo=Gasto/Salida, Positivo=Ingreso/Entrada
   payeeId: string;
   categoryId?: string | null; // null si es SPLIT o TRANSFER entre cuentas on-budget
