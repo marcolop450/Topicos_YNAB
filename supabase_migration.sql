@@ -228,15 +228,26 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 -- 5. POLÍTICAS DE ACCESO RLS
 -- ============================================================================
 
+-- Función auxiliar segura para evitar recursión infinita en RLS de perfiles
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Perfiles
 DROP POLICY IF EXISTS "profiles_select_policy" ON public.profiles;
 CREATE POLICY "profiles_select_policy" ON public.profiles FOR SELECT USING (
-  auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  auth.uid() = id OR public.is_admin()
 );
 
 DROP POLICY IF EXISTS "profiles_update_policy" ON public.profiles;
 CREATE POLICY "profiles_update_policy" ON public.profiles FOR UPDATE USING (
-  auth.uid() = id OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  auth.uid() = id OR public.is_admin()
 );
 
 DROP POLICY IF EXISTS "profiles_insert_policy" ON public.profiles;
