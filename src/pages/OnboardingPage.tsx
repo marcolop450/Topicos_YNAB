@@ -15,8 +15,17 @@ import { Currency, READY_TO_ASSIGN_CATEGORY_ID } from '../types';
 
 export function OnboardingPage() {
   const { user } = useAuth();
-  const { accounts, categories, groups, addTransaction, assignBudget, currentMonth, createCategory } =
-    useBudget();
+  const {
+    accounts,
+    categories,
+    groups,
+    addTransaction,
+    assignBudget,
+    currentMonth,
+    createCategory,
+    createAccount,
+    createGroup,
+  } = useBudget();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
@@ -93,10 +102,16 @@ export function OnboardingPage() {
 
   const handleFinish = () => {
     // 1. Inyectar fondos iniciales como transacción en cuenta primaria
-    if (totalStartingCents > 0 && accounts[0]) {
+    let targetAccount = accounts[0];
+    if (!targetAccount) {
+      targetAccount = createAccount('Cuenta Corriente Principal', 'CHECKING', 0);
+    }
+
+    if (totalStartingCents > 0 && targetAccount) {
       addTransaction({
-        accountId: accounts[0].id,
+        accountId: targetAccount.id,
         date: new Date().toISOString().split('T')[0],
+        time: '12:00',
         amountCents: totalStartingCents,
         payeeId: 'payee-initial',
         categoryId: READY_TO_ASSIGN_CATEGORY_ID,
@@ -106,7 +121,11 @@ export function OnboardingPage() {
     }
 
     // 2. Para cada prioridad seleccionada, buscar o crear la categoría y asignar el monto
-    const defaultGroup = groups[0];
+    let defaultGroup = groups[0];
+    if (!defaultGroup) {
+      defaultGroup = createGroup('Gastos Mensuales');
+    }
+
     selectedPriorities.forEach((priorityName) => {
       let targetCat = categories.find(
         (c) => c.name.toLowerCase() === priorityName.toLowerCase()

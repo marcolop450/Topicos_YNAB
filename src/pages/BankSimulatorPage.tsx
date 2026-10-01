@@ -33,6 +33,7 @@ export function BankSimulatorPage() {
     addTransaction({
       accountId: primaryAccount.id,
       date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().slice(0, 5),
       amountCents: cents,
       payeeId: 'payee-empresa',
       categoryId: READY_TO_ASSIGN_CATEGORY_ID, // Entrada a Ready to Assign
@@ -61,6 +62,7 @@ export function BankSimulatorPage() {
     addTransaction({
       accountId: primaryAccount.id,
       date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().slice(0, 5),
       amountCents: -cents, // Salida
       payeeId: `payee-${Date.now()}`,
       categoryId: cat?.id || null,

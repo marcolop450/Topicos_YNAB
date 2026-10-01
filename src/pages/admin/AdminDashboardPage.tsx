@@ -117,24 +117,30 @@ export function AdminDashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {auditLogs.slice(0, 5).map((log) => (
-              <div
-                key={log.id}
-                className="flex items-start justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs"
-              >
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-slate-900">{log.action}</span>
-                    <span className="text-slate-400">•</span>
-                    <span className="text-blue-600 font-medium">{log.userEmail}</span>
+            {auditLogs.length === 0 ? (
+              <p className="text-center py-6 text-xs text-slate-400 font-medium">
+                No hay eventos de auditoría registrados aún en la plataforma.
+              </p>
+            ) : (
+              auditLogs.slice(0, 5).map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-slate-900">{log.action}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-blue-600 font-medium">{log.userEmail}</span>
+                    </div>
+                    <p className="text-slate-600 mt-1">{log.details}</p>
                   </div>
-                  <p className="text-slate-600 mt-1">{log.details}</p>
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+                    {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                  {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

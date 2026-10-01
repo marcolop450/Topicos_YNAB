@@ -26,9 +26,13 @@ export function LoginPage() {
     try {
       setIsLoading(true);
       setError(null);
-      await login(email, password);
-      // Redirección directa al presupuesto del usuario
-      navigate('/app/budget');
+      const userProfile = await login(email, password);
+      // Redirección inteligente según el rol del usuario (SSD-01)
+      if (userProfile.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/app/budget');
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {

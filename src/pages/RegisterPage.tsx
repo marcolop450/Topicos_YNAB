@@ -28,8 +28,8 @@ export function RegisterPage() {
       setIsLoading(true);
       setError(null);
       await register(email, fullName, password);
-      // Redirigir directamente al presupuesto del nuevo usuario
-      navigate('/app/budget');
+      // Redirigir al asistente de bienvenida interactivo (Onboarding Wizard)
+      navigate('/onboarding');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al registrar tu cuenta');
     } finally {
